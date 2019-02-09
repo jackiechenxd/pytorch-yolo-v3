@@ -105,3 +105,4 @@ ENV/
 det/
 bbox_output/
 *.weights
+res/
