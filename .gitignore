@@ -99,3 +99,9 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+
+# some output directory
+det/
+bbox_output/
+*.weights
