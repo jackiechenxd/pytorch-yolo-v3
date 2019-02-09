@@ -14,7 +14,6 @@ from preprocess import prep_image, inp_to_image
 import pandas as pd
 import random
 import pickle as pkl
-import itertools
 
 
 class test_net(nn.Module):
@@ -41,7 +40,6 @@ def get_test_input(input_dim, CUDA):
 
     if CUDA:
         img_ = img_.cuda()
-    num_classes
     return img_
 
 
@@ -50,69 +48,38 @@ def arg_parse():
     Parse arguements to the detect module
     
     """
-
     parser = argparse.ArgumentParser(description='YOLO v3 Detection Module')
 
-    parser.add_argument("--images", dest='images', help=
-    "Image / Directory containing images to perform detection upon",
+    parser.add_argument("--images", dest='images', help="Image or directory containing images to perform detection upon",
                         default="imgs", type=str)
-    parser.add_argument("--det", dest='det', help=
-    "Image / Directory to store detections to",
-                        default="det", type=str)
+    parser.add_argument("--det_images", dest='det', help="Image or directory to store detections to",
+                        default="res/images", type=str)
+    parser.add_argument("--names", dest='names', help="specify the names of classes", default="data/ap.names", type=str)
+    parser.add_argument("--cfg", dest='cfgfile', help="Config file", default="cfg/yolov3.cfg", type=str)
+    parser.add_argument("--weights", dest='weightsfile', help="weightsfile", default="yolov3.weights", type=str)
     parser.add_argument("--bs", dest="bs", help="Batch size", default=1)
     parser.add_argument("--confidence", dest="confidence", help="Object Confidence to filter predictions", default=0.5)
     parser.add_argument("--nms_thresh", dest="nms_thresh", help="NMS Threshhold", default=0.4)
-    parser.add_argument("--cfg", dest='cfgfile', help=
-    "Config file",
-                        default="cfg/yolov3.cfg", type=str)
-    parser.add_argument("--weights", dest='weightsfile', help=
-    "weightsfile",
-                        default="yolov3.weights", type=str)
-    parser.add_argument("--reso", dest='reso', help=
-    "Input resolution of the network. Increase to increase accuracy. Decrease to increase speed",
+    parser.add_argument("--res", dest='res', help=
+                        "Input resolution of the network. Increase to increase accuracy. Decrease to increase speed",
                         default="416", type=str)
     parser.add_argument("--scales", dest="scales", help="Scales to use for detection",
                         default="1,2,3", type=str)
-    parser.add_argument("--bbox_dir", dest="bbox_dir", help="Please specify dir for bbox output", default="bbox_output",
+    parser.add_argument("--bbox", dest="bbox_dir", help="Please specify dir for bbox output", default="res/bbox",
                         type=str)
-
     return parser.parse_args()
 
 
-if __name__ == '__main__':
-    args = arg_parse()
-
+def detect(args):
     scales = args.scales
-
-    #        scales = [int(x) for x in scales.split(',')]
-    #
-    #
-    #
-    #        args.reso = int(args.reso)
-    #
-    #        num_boxes = [args.reso//32, args.reso//16, args.reso//8]
-    #        scale_indices = [3*(x**2) for x in num_boxes]
-    #        scale_indices = list(itertools.accumulate(scale_indices, lambda x,y : x+y))
-    #
-    #
-    #        li = []
-    #        i = 0
-    #        for scale in scale_indices:
-    #            li.extend(list(range(i, scale)))
-    #            i = scale
-    #
-    #        scale_indices = li
-
     images = args.images
     batch_size = int(args.bs)
     confidence = float(args.confidence)
     nms_thesh = float(args.nms_thresh)
-    start = 0
 
+    classes = load_classes(args.names)
+    num_classes = len(classes)
     CUDA = torch.cuda.is_available()
-
-    num_classes = 1
-    classes = load_classes('data/ap.name')
 
     # Set up the neural network
     print("Loading network.....")
@@ -120,14 +87,11 @@ if __name__ == '__main__':
     model.load_weights(args.weightsfile)
     print("Network successfully loaded")
 
-    model.net_info["height"] = args.reso
-    inp_dim = int(model.net_info["height"])
-    assert inp_dim % 32 == 0
-    assert inp_dim > 32
+    input_dim = int(args.res)
+    assert input_dim % 32 == 0 and input_dim > 32, 'input height must be multiple of 32'
+    model.net_info["height"] = input_dim
 
-    # If there's a GPU availible, put the model on GPU
     if CUDA:
-        print("Using GPU")
         model.cuda()
 
     # Set the model in evaluation mode
@@ -140,8 +104,7 @@ if __name__ == '__main__':
                   os.path.splitext(img)[1] == '.png' or os.path.splitext(img)[1] == '.jpeg' or os.path.splitext(img)[
                       1] == '.jpg' or os.path.splitext(img)[1] == '.JPG']
     except NotADirectoryError:
-        imlist = []
-        imlist.append(osp.join(osp.realpath('.'), images))
+        imlist = [osp.join(osp.realpath('.'), images)]
     except FileNotFoundError:
         print("No file or directory with the name {}".format(images))
         exit()
@@ -154,7 +117,7 @@ if __name__ == '__main__':
 
     load_batch = time.time()
 
-    batches = list(map(prep_image, imlist, [inp_dim for x in range(len(imlist))]))
+    batches = list(map(prep_image, imlist, [input_dim for x in range(len(imlist))]))
     im_batches = [x[0] for x in batches]
     orig_ims = [x[1] for x in batches]
     im_dim_list = [x[2] for x in batches]
@@ -165,7 +128,7 @@ if __name__ == '__main__':
 
     leftover = 0
 
-    if (len(im_dim_list) % batch_size):
+    if len(im_dim_list) % batch_size:
         leftover = 1
 
     if batch_size != 1:
@@ -176,11 +139,9 @@ if __name__ == '__main__':
     i = 0
 
     write = False
-    model(get_test_input(inp_dim, CUDA), CUDA)
+    model(get_test_input(input_dim, CUDA), CUDA)
 
     start_det_loop = time.time()
-
-    objs = {}
 
     for batch in im_batches:
         # load the image
@@ -191,7 +152,7 @@ if __name__ == '__main__':
         # Apply offsets to the result predictions
         # Tranform the predictions as described in the YOLO paper
         # flatten the prediction vector
-        # B x (bbox cord x no. of anchors) x grid_w x grid_h --> B x bbox x (all the boxes) 
+        # B x (bbox cord x no. of anchors) x grid_w x grid_h --> B x bbox x (all the boxes)
         # Put every proposed box as a row.
         with torch.no_grad():
             prediction = model(Variable(batch), CUDA)
@@ -243,10 +204,10 @@ if __name__ == '__main__':
 
     im_dim_list = torch.index_select(im_dim_list, 0, output[:, 0].long())
 
-    scaling_factor = torch.min(inp_dim / im_dim_list, 1)[0].view(-1, 1)
+    scaling_factor = torch.min(input_dim / im_dim_list, 1)[0].view(-1, 1)
 
-    output[:, [1, 3]] -= (inp_dim - scaling_factor * im_dim_list[:, 0].view(-1, 1)) / 2
-    output[:, [2, 4]] -= (inp_dim - scaling_factor * im_dim_list[:, 1].view(-1, 1)) / 2
+    output[:, [1, 3]] -= (input_dim - scaling_factor * im_dim_list[:, 0].view(-1, 1)) / 2
+    output[:, [2, 4]] -= (input_dim - scaling_factor * im_dim_list[:, 1].view(-1, 1)) / 2
 
     output[:, 1:5] /= scaling_factor
 
@@ -255,13 +216,9 @@ if __name__ == '__main__':
         output[i, [2, 4]] = torch.clamp(output[i, [2, 4]], 0.0, im_dim_list[i, 1])
 
     output_recast = time.time()
-
     class_load = time.time()
-
     colors = pkl.load(open("pallete", "rb"))
-
     draw = time.time()
-
 
     def write(x, batches, results):
         c1 = tuple(x[1:3].int())
@@ -277,27 +234,19 @@ if __name__ == '__main__':
         cv2.putText(img, label, (c1[0], c1[1] + t_size[1] + 4), cv2.FONT_HERSHEY_PLAIN, 1, [225, 255, 255], 1)
         return img
 
-
     def write_bbox(x, file_names):
         file_name = file_names[int(x[0])]
         with open(file_name, "w") as text_file:
             text_file.write('%d, %d, %d, %d' % tuple(x[1:5].int()))
 
-
     list(map(lambda x: write(x, im_batches, orig_ims), output))
-
     bbox_names = pd.Series(imlist).apply(lambda x: "{}/{}.txt".format(args.bbox_dir, x.split("/")[-1].split(".")[0]))
-
     list(map(lambda x: write_bbox(x, bbox_names), output))
-
     det_names = pd.Series(imlist).apply(lambda x: "{}/det_{}".format(args.det, x.split("/")[-1]))
-
     list(map(cv2.imwrite, det_names, orig_ims))
-
     end = time.time()
 
-    print()
-    print("SUMMARY")
+    print("\nSUMMARY")
     print("----------------------------------------------------------")
     print("{:25s}: {}".format("Task", "Time Taken (in seconds)"))
     print()
@@ -308,5 +257,10 @@ if __name__ == '__main__':
     print("{:25s}: {:2.3f}".format("Drawing Boxes", end - draw))
     print("{:25s}: {:2.3f}".format("Average time_per_img", (end - load_batch) / len(imlist)))
     print("----------------------------------------------------------")
-
     torch.cuda.empty_cache()
+
+
+if __name__ == '__main__':
+    # parse the inputs of the program
+    args = arg_parse()
+    detect(args)
