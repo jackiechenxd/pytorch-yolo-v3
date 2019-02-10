@@ -50,18 +50,20 @@ def arg_parse():
     """
     parser = argparse.ArgumentParser(description='YOLO v3 Detection Module')
 
-    parser.add_argument("--images", dest='images', help="Image or directory containing images to perform detection upon",
-                        default="imgs", type=str)
+    parser.add_argument("--images", dest='images',
+                        help="Image or directory containing images to perform detection upon",
+                        default="./imgs/IMG_7403.JPG", type=str)
     parser.add_argument("--det_images", dest='det', help="Image or directory to store detections to",
                         default="res/images", type=str)
     parser.add_argument("--names", dest='names', help="specify the names of classes", default="data/ap.names", type=str)
-    parser.add_argument("--cfg", dest='cfgfile', help="Config file", default="cfg/yolov3.cfg", type=str)
-    parser.add_argument("--weights", dest='weightsfile', help="weightsfile", default="yolov3.weights", type=str)
+    parser.add_argument("--cfg", dest='cfgfile', help="Config file", default="cfg/ap_yolov3-tiny_obj.cfg", type=str)
+    parser.add_argument("--weights", dest='weightsfile', help="weightsfile",
+                        default="./weights/ap_yolov3-tiny_obj_10000.weights", type=str)
     parser.add_argument("--bs", dest="bs", help="Batch size", default=1)
     parser.add_argument("--confidence", dest="confidence", help="Object Confidence to filter predictions", default=0.5)
     parser.add_argument("--nms_thresh", dest="nms_thresh", help="NMS Threshhold", default=0.4)
     parser.add_argument("--res", dest='res', help=
-                        "Input resolution of the network. Increase to increase accuracy. Decrease to increase speed",
+    "Input resolution of the network. Increase to increase accuracy. Decrease to increase speed",
                         default="416", type=str)
     parser.add_argument("--scales", dest="scales", help="Scales to use for detection",
                         default="1,2,3", type=str)
