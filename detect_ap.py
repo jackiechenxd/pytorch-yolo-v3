@@ -70,6 +70,38 @@ def arg_parse():
     return parser.parse_args()
 
 
+def detect_single(image_RGB, cfg, weights):
+    batch_size = 1
+    confidence = 0.5
+    nms_thesh = 0.4
+    input_dim = 416
+
+    classes = ['marker']
+    num_classes = len(classes)
+    CUDA = torch.cuda.is_available()
+
+    # Set up the neural network
+    print("Loading network.....")
+    model = Darknet(cfg)
+    model.load_weights(weights)
+    print("Network successfully loaded")
+
+    if CUDA:
+        model.cuda()
+
+    # Set the model in evaluation mode
+    model.eval()
+    model(get_test_input(input_dim, CUDA), CUDA)
+    if CUDA:
+        batch = image_RGB.cuda()
+
+    with torch.no_grad():
+        prediction = model(Variable(batch), CUDA)
+
+    prediction = write_results(prediction, confidence, num_classes, nms=True, nms_conf=nms_thesh)
+    return prediction
+
+
 def detect(args):
     scales = args.scales
     images = args.images
