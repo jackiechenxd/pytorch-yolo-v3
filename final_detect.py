@@ -1,4 +1,5 @@
 from __future__ import division
+
 import time
 import torch
 import torch.nn as nn
@@ -6,6 +7,7 @@ from torch.autograd import Variable
 import numpy as np
 import cv2
 from util import *
+from preprocess import *
 from darknet import Darknet
 
 
@@ -45,12 +47,8 @@ class GenerateFinalDetections():
         if self.cuda:
             self.model.cuda()
 
-        dim = img.shape[1], img.shape[0]
-        img = cv2.resize(img, (input_dim, input_dim))
-        img_ = img[:, :, ::-1].transpose((2, 0, 1))
-        img_ = img_[np.newaxis, :, :, :] / 255.0
-        img_ = torch.from_numpy(img_).float()
-        img_ = Variable(img_)
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        img_, orig_img, dim = prep_image_content(img, input_dim)
         if self.cuda:
             img_ = img_.cuda()
 
@@ -85,20 +83,26 @@ class GenerateFinalDetections():
         image = cv2.cvtColor(imageRGB, cv2.COLOR_RGB2BGR)
         crop_img = image[y:y2, x:x2]
         crop_img = cv2.GaussianBlur(crop_img, (15, 15), 0)
+        equ = cv2.equalizeHist(crop_img[:, :, 1])
+        # cv2.imshow("NormImage", equ)
+        # cv2.waitKey(0)
+
+        # _, mask_s = cv2.threshold(equ, 0, 255, type=cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)
+        # cv2.imshow("BinaryImage", mask_s)
+        # cv2.waitKey(0)
 
         hsv = cv2.cvtColor(crop_img, cv2.COLOR_BGR2HSV)
+        # working well wit blue color but not purple
         lower_blue = np.array([100, 0, 0])
         upper_blue = np.array([180, 255, 255])
+
+        # lower_blue = np.array([100, 100, 20])
+        # upper_blue = np.array([180, 255, 255])
         binary = 255 - cv2.inRange(hsv, lower_blue, upper_blue)
         binary = cv2.GaussianBlur(binary, (5, 5), 0)
 
-        # cv2.imshow("Image", binary)
-        # cv2.waitKey(0)
-
         im2, contours, hierarchy = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-        areas = [cv2.contourArea(cnt) for cnt in contours]
-        index = np.argmax(areas)
+        index = np.argmax([cv2.contourArea(cnt) for cnt in contours])
         rect_cnt = contours[index]
         epsilon = 0.1 * cv2.arcLength(rect_cnt, True)
         approx = cv2.approxPolyDP(rect_cnt, epsilon, True)
@@ -112,7 +116,7 @@ class GenerateFinalDetections():
 
 if __name__ == '__main__':
     detector = GenerateFinalDetections()
-    image = cv2.imread('./imgs/IMG_9720.JPG')
+    image = cv2.imread('./imgs/IMG_7403.JPG')
     imageRGB = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     result = detector.predict(imageRGB)
     print(result)
